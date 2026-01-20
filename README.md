@@ -1,7 +1,7 @@
 # 业余无线电工具箱 (Amateur Radio Helper)
 
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" width="120" alt="App Icon"/>
+  <img src="app/src/main/res/drawable/icon.png" width="120" alt="App Icon"/>
 </p>
 
 <p align="center">
@@ -42,29 +42,18 @@
 - **学习统计**：查看学习进度和成绩
 - **数据管理**：清除缓存等功能
 
-## 📱 截图
-
-*即将添加*
-
 ## 🛠️ 技术栈
 
 | 技术 | 说明 |
 |------|------|
-| **Kotlin 2.0** | 主开发语言 |
+| **Kotlin** | 主开发语言 |
 | **Jetpack Compose** | 现代声明式 UI 框架 |
-| **Material Design 3** | Google 最新设计规范 |
+| **Material Design 3** | UI风格 |
 | **Room** | 本地数据库 |
 | **DataStore** | 偏好设置存储 |
 | **Coil** | 图片加载 |
 | **MVVM** | 架构模式 |
 
-## 📦 题库信息
-
-| 类别 | 题目数量 | 考试题数 | 考试时间 | 及格线 |
-|------|----------|----------|----------|--------|
-| A 类 | 683 题 | 40 题 | 30 分钟 | 80% |
-| B 类 | 1143 题 | 60 题 | 50 分钟 | 80% |
-| C 类 | 1282 题 | 90 题 | 80 分钟 | 80% |
 
 ## 🚀 快速开始
 
@@ -101,12 +90,6 @@ KEY_PASSWORD=your_key_password
 ## 📄 开源协议
 
 本项目采用 [CC BY-SA 4.0](LICENSE) 协议开源。
-
-这意味着您可以：
-- ✅ 自由分享和修改本项目
-- ✅ 用于商业目的
-- ⚠️ 必须注明原作者
-- ⚠️ 修改后需使用相同协议发布
 
 ## 🤝 贡献
 
