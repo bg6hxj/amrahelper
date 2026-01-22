@@ -23,6 +23,9 @@ import bg6hxj.amatureradiohelper.R
 @Composable
 fun AboutScreen(
     onBackClick: () -> Unit,
+    onUserAgreementClick: () -> Unit = {},
+    onPrivacyPolicyClick: () -> Unit = {},
+    onPermissionListClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val tag = "AboutScreen"
@@ -92,6 +95,42 @@ fun AboutScreen(
                         InfoRow(label = "应用版本", value = "1.0.0")
                         Divider()
                         InfoRow(label = "题库版本", value = "2025.07.28")
+                    }
+                }
+            }
+            
+            // 法律信息入口
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // 用户协议
+                        LegalInfoItem(
+                            icon = Icons.Default.List,
+                            title = "用户协议",
+                            onClick = onUserAgreementClick
+                        )
+                        
+                        Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                        
+                        // 隐私政策
+                        LegalInfoItem(
+                            icon = Icons.Default.Lock,
+                            title = "隐私政策",
+                            onClick = onPrivacyPolicyClick
+                        )
+                        
+                        Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                        
+                        // 权限收集清单
+                        LegalInfoItem(
+                            icon = Icons.Default.Settings,
+                            title = "权限收集清单",
+                            onClick = onPermissionListClick
+                        )
                     }
                 }
             }
@@ -258,5 +297,45 @@ fun InfoRow(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+
+/**
+ * 法律信息入口项组件
+ */
+@Composable
+private fun LegalInfoItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

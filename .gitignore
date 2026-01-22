@@ -91,3 +91,5 @@ build_errors.txt
 /app/build/
 /app/debug/
 /app/release/
+
+.serena/

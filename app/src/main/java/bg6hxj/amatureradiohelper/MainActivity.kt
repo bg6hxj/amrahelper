@@ -29,9 +29,12 @@ import bg6hxj.amatureradiohelper.ui.screen.AddContactLogScreen
 import bg6hxj.amatureradiohelper.ui.screen.DiscoverScreen
 import bg6hxj.amatureradiohelper.ui.screen.ExamScreen
 import bg6hxj.amatureradiohelper.ui.screen.ImageViewerScreen
+import bg6hxj.amatureradiohelper.ui.screen.PermissionListScreen
+import bg6hxj.amatureradiohelper.ui.screen.PrivacyPolicyScreen
 import bg6hxj.amatureradiohelper.ui.screen.ProfileScreen
 import bg6hxj.amatureradiohelper.ui.screen.PropagationScreen
 import bg6hxj.amatureradiohelper.ui.screen.ReferenceDetailScreen
+import bg6hxj.amatureradiohelper.ui.screen.UserAgreementScreen
 import bg6hxj.amatureradiohelper.ui.screen.WavelengthCalculatorScreen
 import bg6hxj.amatureradiohelper.ui.theme.AmatureRadioHelperTheme
 
@@ -52,6 +55,9 @@ class MainActivity : ComponentActivity() {
 fun AmatureRadioHelperApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.EXAM) }
     var showAboutScreen by rememberSaveable { mutableStateOf(false) }
+    var showUserAgreementScreen by rememberSaveable { mutableStateOf(false) }
+    var showPrivacyPolicyScreen by rememberSaveable { mutableStateOf(false) }
+    var showPermissionListScreen by rememberSaveable { mutableStateOf(false) }
     var showSequentialReviewScreen by rememberSaveable { mutableStateOf(false) }
     var showSequentialPracticeScreen by rememberSaveable { mutableStateOf(false) }
     var showRandomPracticeScreen by rememberSaveable { mutableStateOf(false) }
@@ -71,9 +77,23 @@ fun AmatureRadioHelperApp() {
     var imageViewTitle by rememberSaveable { mutableStateOf("") }
     var selectedLevel by rememberSaveable { mutableStateOf("A") }
 
-    if (showAboutScreen) {
+    if (showUserAgreementScreen) {
+        BackHandler { showUserAgreementScreen = false }
+        UserAgreementScreen(onBackClick = { showUserAgreementScreen = false })
+    } else if (showPrivacyPolicyScreen) {
+        BackHandler { showPrivacyPolicyScreen = false }
+        PrivacyPolicyScreen(onBackClick = { showPrivacyPolicyScreen = false })
+    } else if (showPermissionListScreen) {
+        BackHandler { showPermissionListScreen = false }
+        PermissionListScreen(onBackClick = { showPermissionListScreen = false })
+    } else if (showAboutScreen) {
         BackHandler { showAboutScreen = false }
-        AboutScreen(onBackClick = { showAboutScreen = false })
+        AboutScreen(
+            onBackClick = { showAboutScreen = false },
+            onUserAgreementClick = { showUserAgreementScreen = true },
+            onPrivacyPolicyClick = { showPrivacyPolicyScreen = true },
+            onPermissionListClick = { showPermissionListScreen = true }
+        )
     } else if (showAddContactLogScreen) {
         BackHandler { showAddContactLogScreen = false }
         AddContactLogScreen(onNavigateBack = { showAddContactLogScreen = false })
