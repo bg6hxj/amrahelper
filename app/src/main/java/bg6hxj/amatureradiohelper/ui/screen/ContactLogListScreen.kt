@@ -13,6 +13,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +29,20 @@ import bg6hxj.amatureradiohelper.data.entity.ContactLog
 import bg6hxj.amatureradiohelper.data.repository.ContactLogRepository
 import bg6hxj.amatureradiohelper.ui.viewmodel.ContactLogViewModel
 import bg6hxj.amatureradiohelper.ui.viewmodel.ContactLogViewModelFactory
+import bg6hxj.amatureradiohelper.ui.viewmodel.DateFilter
 import bg6hxj.amatureradiohelper.util.ContactLogExporter
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.rememberDateRangePickerState
+import androidx.compose.material3.FilterChip
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -44,7 +60,7 @@ fun ContactLogListScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     
-    val database = remember { AppDatabase.getDatabase(context) }
+    val database = AppDatabase.getDatabase(context)
     val repository = remember { ContactLogRepository(database.contactLogDao()) }
     val viewModel: ContactLogViewModel = viewModel(
         factory = ContactLogViewModelFactory(repository)
@@ -58,9 +74,13 @@ fun ContactLogListScreen(
     var logToDelete by remember { mutableStateOf<ContactLog?>(null) }
     
     // 菜单状态
+
     var showMenu by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showDatePickerDialog by remember { mutableStateOf(false) }
+    var showSearchPanel by remember { mutableStateOf(false) }
+
     
     // 文件选择器 - 导出 JSON
     val exportJsonLauncher = rememberLauncherForActivityResult(
@@ -157,7 +177,21 @@ fun ContactLogListScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text(if (showSearchPanel) "隐藏查找" else "查找日志") },
+                                leadingIcon = { 
+                                    Icon(
+                                        if (showSearchPanel) Icons.Default.KeyboardArrowUp else Icons.Default.Search, 
+                                        contentDescription = null
+                                    ) 
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    showSearchPanel = !showSearchPanel
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("导入日志") },
+                                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
                                 onClick = {
                                     showMenu = false
                                     showImportDialog = true
@@ -165,6 +199,7 @@ fun ContactLogListScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("导出日志") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) },
                                 onClick = {
                                     showMenu = false
                                     showExportDialog = true
@@ -217,7 +252,90 @@ fun ContactLogListScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
             }
+            
+
+            
+            // Search Bar & Filters
+            if (showSearchPanel) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    // Search Bar
+                val searchQuery by viewModel.searchQuery.collectAsState()
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    placeholder = { Text("搜索呼号或备注...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                Icon(Icons.Default.Close, contentDescription = "清除")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    colors = OutlinedTextFieldDefaults.colors(
+                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                         disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { /* Execute search (handled by state) */ })
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Date Filters
+                val dateFilter by viewModel.dateFilter.collectAsState()
+                val scrollState = rememberScrollState()
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(scrollState),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val filters = listOf(
+                        DateFilter.Today,
+                        DateFilter.Last3Days,
+                        DateFilter.LastWeek,
+                        DateFilter.LastMonth,
+                        DateFilter.Last3Months,
+                        DateFilter.LastYear,
+                        DateFilter.All,
+                        DateFilter.Custom
+                    )
+                    
+                    filters.forEach { filter ->
+                        FilterChip(
+                            selected = dateFilter == filter || (dateFilter is DateFilter.Custom && filter is DateFilter.Custom),
+                            onClick = {
+                                if (filter is DateFilter.Custom) {
+                                     // Show Date Picker Dialog
+                                     showDatePickerDialog = true
+                                } else {
+                                     viewModel.updateDateFilter(filter)
+                                }
+                            },
+                            label = { Text(filter.label) },
+                            leadingIcon = if (filter == dateFilter) {
+                                { Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null
+                        )
+                    }
+                }
+                    }
+            }
+
+
+
 
             // Log List
             if (logs.isEmpty()) {
@@ -312,6 +430,69 @@ fun ContactLogListScreen(
                 exportCsvLauncher.launch("contact_logs_$timestamp.csv")
             }
         )
+    }
+
+    if (showDatePickerDialog) {
+        val dateRangePickerState = rememberDateRangePickerState()
+        
+        DatePickerDialog(
+            onDismissRequest = { showDatePickerDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val start = dateRangePickerState.selectedStartDateMillis
+                        val end = dateRangePickerState.selectedEndDateMillis
+                        if (start != null && end != null) {
+                            // Adjust end date to end of day
+                            val adjustedEnd = end + 86399999 // + 23:59:59.999
+                            viewModel.updateCustomDateRange(start, adjustedEnd)
+                            showDatePickerDialog = false
+                        }
+                    },
+                    enabled = dateRangePickerState.selectedEndDateMillis != null
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePickerDialog = false }) {
+                    Text("取消")
+                }
+            }
+        ) {
+            DateRangePicker(
+                state = dateRangePickerState,
+                title = {
+                    Text(
+                        text = "选择日期范围",
+                        modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                },
+                headline = {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, end = 12.dp, bottom = 12.dp)
+                    ) {
+                        val start = dateRangePickerState.selectedStartDateMillis
+                        val end = dateRangePickerState.selectedEndDateMillis
+                        val startText = if (start != null) {
+                            java.time.Instant.ofEpochMilli(start).atZone(java.time.ZoneId.of("UTC")).toLocalDate().toString()
+                        } else "开始日期"
+                        val endText = if (end != null) {
+                            java.time.Instant.ofEpochMilli(end).atZone(java.time.ZoneId.of("UTC")).toLocalDate().toString()
+                        } else "结束日期"
+                        
+                        Text(
+                            text = "$startText - $endText",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 

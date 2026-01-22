@@ -10,6 +10,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import bg6hxj.amatureradiohelper.data.database.AppDatabase
+import bg6hxj.amatureradiohelper.data.repository.ContactLogRepository
+import bg6hxj.amatureradiohelper.ui.viewmodel.ContactLogViewModel
+import bg6hxj.amatureradiohelper.ui.viewmodel.ContactLogViewModelFactory
 
 /**
  * 发现模块主页面
@@ -21,6 +27,16 @@ fun DiscoverScreen(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val database = remember { AppDatabase.getDatabase(context) }
+    val repository = remember { ContactLogRepository(database.contactLogDao()) }
+    val viewModel: ContactLogViewModel = viewModel(
+        factory = ContactLogViewModelFactory(repository)
+    )
+
+    val logCount by viewModel.logCount.collectAsState()
+    val monthLogCount by viewModel.monthLogCount.collectAsState()
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -70,6 +86,8 @@ fun DiscoverScreen(
 
         item {
             ContactLogCard(
+                totalCount = logCount,
+                monthCount = monthLogCount,
                 onClick = { onNavigate("contact_log_list") }
             )
         }
@@ -266,6 +284,8 @@ fun KnowledgeCard(
  */
 @Composable
 fun ContactLogCard(
+    totalCount: Int,
+    monthCount: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -311,12 +331,12 @@ fun ContactLogCard(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = "总计: 0 条",
+                            text = "总计: $totalCount 条",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
-                            text = "本月: 0 条",
+                            text = "本月: $monthCount 条",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )

@@ -11,15 +11,47 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import java.time.LocalDate
+
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+
 class ContactLogViewModel(
     private val repository: ContactLogRepository
 ) : ViewModel() {
 
+    // Search & Filter State
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery = _searchQuery.asStateFlow()
+
+    private val _dateFilter = MutableStateFlow<DateFilter>(DateFilter.All)
+    val dateFilter = _dateFilter.asStateFlow()
+    
+    // Custom Date Range (Start/End Timestamps)
+    private val _customDateRange = MutableStateFlow<Pair<Long, Long>?>(null)
+    val customDateRange = _customDateRange.asStateFlow()
+
     // List State
-    val contactLogs: StateFlow<List<ContactLog>> = repository.getAllLogs()
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val contactLogs: StateFlow<List<ContactLog>> = combine(
+        _searchQuery,
+        _dateFilter,
+        _customDateRange
+    ) { query, filter, customRange ->
+        Triple(query, filter, customRange)
+    }.flatMapLatest { (query, filter, customRange) ->
+        val (startTime, endTime) = calculateTimeRange(filter, customRange)
+        repository.getLogsFiltered(query, startTime, endTime)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
         
     val logCount: StateFlow<Int> = repository.getLogCount()
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val monthLogCount: StateFlow<Int> = repository.getLogCountAfter(getStartOfMonthTimestamp())
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     // Form State
@@ -134,6 +166,80 @@ class ContactLogViewModel(
             onComplete(logs.size)
         }
     }
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun updateDateFilter(filter: DateFilter) {
+        _dateFilter.value = filter
+    }
+    
+    fun updateCustomDateRange(start: Long, end: Long) {
+        _customDateRange.value = start to end
+        _dateFilter.value = DateFilter.Custom
+    }
+
+    private fun getStartOfMonthTimestamp(): Long {
+        return LocalDate.now()
+            .withDayOfMonth(1)
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }
+    
+    private fun calculateTimeRange(filter: DateFilter, customRange: Pair<Long, Long>?): Pair<Long, Long> {
+        val now = LocalDateTime.now()
+        val zoneId = ZoneId.systemDefault()
+        
+        return when (filter) {
+            DateFilter.Today -> {
+                val start = LocalDate.now().atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = System.currentTimeMillis()
+                start to end
+            }
+            DateFilter.Last3Days -> {
+                val start = LocalDate.now().minusDays(2).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = System.currentTimeMillis()
+                start to end
+            }
+            DateFilter.LastWeek -> {
+                val start = LocalDate.now().minusWeeks(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = System.currentTimeMillis()
+                start to end
+            }
+            DateFilter.LastMonth -> {
+                val start = LocalDate.now().minusMonths(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = System.currentTimeMillis()
+                start to end
+            }
+            DateFilter.Last3Months -> {
+                val start = LocalDate.now().minusMonths(3).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = System.currentTimeMillis()
+                start to end
+            }
+            DateFilter.LastYear -> {
+                val start = LocalDate.now().minusYears(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = System.currentTimeMillis()
+                start to end
+            }
+            DateFilter.Custom -> {
+                customRange ?: (0L to 0L)
+            }
+            DateFilter.All -> 0L to 0L
+        }
+    }
+}
+
+sealed class DateFilter(val label: String) {
+    object Today : DateFilter("今天")
+    object Last3Days : DateFilter("最近三天")
+    object LastWeek : DateFilter("最近一周")
+    object LastMonth : DateFilter("最近一个月")
+    object Last3Months : DateFilter("最近三个月")
+    object LastYear : DateFilter("最近一年")
+    object All : DateFilter("全部")
+    object Custom : DateFilter("自定义")
 }
 
 data class AddLogUiState(

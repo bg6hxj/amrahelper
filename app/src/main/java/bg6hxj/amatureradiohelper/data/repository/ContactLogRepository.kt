@@ -14,6 +14,14 @@ class ContactLogRepository(private val contactLogDao: ContactLogDao) {
         return contactLogDao.getLogCount()
     }
 
+    fun getLogCountAfter(timestamp: Long): Flow<Int> {
+        return contactLogDao.getLogCountAfter(timestamp)
+    }
+
+    fun getLogsFiltered(query: String, startTime: Long, endTime: Long): Flow<List<ContactLog>> {
+        return contactLogDao.getLogsFiltered(query, startTime, endTime)
+    }
+
     suspend fun getLogById(id: Long): ContactLog? {
         return contactLogDao.getLogById(id)
     }
