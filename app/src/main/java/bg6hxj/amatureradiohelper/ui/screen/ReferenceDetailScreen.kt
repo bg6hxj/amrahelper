@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -67,6 +68,8 @@ fun ReferenceDetailScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val density = LocalDensity.current
+    val headerOffset = remember(density) { with(density) { 80.dp.roundToPx() } }
     
     // 执行搜索
     fun performSearch(query: String, scrollToFirst: Boolean = true) {
@@ -139,7 +142,7 @@ fun ReferenceDetailScreen(
         
         if (scrollToFirst && indices.isNotEmpty()) {
             coroutineScope.launch {
-                listState.animateScrollToItem(indices[0])
+                listState.animateScrollToItem(indices[0], -headerOffset)
             }
         }
     }
@@ -157,7 +160,7 @@ fun ReferenceDetailScreen(
         if (matchIndices.isEmpty()) return
         currentMatchIndex = (currentMatchIndex + 1) % matchIndices.size
         coroutineScope.launch {
-            listState.animateScrollToItem(matchIndices[currentMatchIndex])
+            listState.animateScrollToItem(matchIndices[currentMatchIndex], -headerOffset)
         }
     }
     
@@ -165,7 +168,7 @@ fun ReferenceDetailScreen(
         if (matchIndices.isEmpty()) return
         currentMatchIndex = if (currentMatchIndex > 0) currentMatchIndex - 1 else matchIndices.size - 1
         coroutineScope.launch {
-            listState.animateScrollToItem(matchIndices[currentMatchIndex])
+            listState.animateScrollToItem(matchIndices[currentMatchIndex], -headerOffset)
         }
     }
     
@@ -210,7 +213,7 @@ fun ReferenceDetailScreen(
                             if (matchIndices.isNotEmpty()) {
                                 currentMatchIndex = 0
                                 coroutineScope.launch {
-                                    listState.animateScrollToItem(matchIndices[0])
+                                    listState.animateScrollToItem(matchIndices[0], -headerOffset)
                                 }
                             }
                             focusManager.clearFocus()

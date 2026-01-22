@@ -127,7 +127,8 @@ class QuestionRepository(
         studyRecordDao.update(
             record.copy(
                 isLearned = true,
-                lastStudyTime = System.currentTimeMillis()
+                lastStudyTime = System.currentTimeMillis(),
+                level = level
             )
         )
     }
@@ -141,7 +142,8 @@ class QuestionRepository(
             record.copy(
                 isLearned = true,
                 isMastered = !record.isMastered, // 切换关注状态
-                lastStudyTime = System.currentTimeMillis()
+                lastStudyTime = System.currentTimeMillis(),
+                level = level
             )
         )
     }
@@ -156,7 +158,8 @@ class QuestionRepository(
             studyRecordDao.update(
                 record.copy(
                     isLearned = true,
-                    lastStudyTime = System.currentTimeMillis()
+                    lastStudyTime = System.currentTimeMillis(),
+                    level = level
                 )
             )
         } else {
@@ -165,7 +168,8 @@ class QuestionRepository(
                     isLearned = true,
                     isWrong = true,
                     wrongCount = record.wrongCount + 1,
-                    lastStudyTime = System.currentTimeMillis()
+                    lastStudyTime = System.currentTimeMillis(),
+                    level = level
                 )
             )
         }
@@ -179,7 +183,8 @@ class QuestionRepository(
         studyRecordDao.update(
             record.copy(
                 isFavorite = !record.isFavorite,
-                lastStudyTime = System.currentTimeMillis()
+                lastStudyTime = System.currentTimeMillis(),
+                level = level
             )
         )
     }
@@ -201,7 +206,8 @@ class QuestionRepository(
         studyRecordDao.update(
             record.copy(
                 randomPracticeDone = true,
-                lastStudyTime = System.currentTimeMillis()
+                lastStudyTime = System.currentTimeMillis(),
+                level = level
             )
         )
     }

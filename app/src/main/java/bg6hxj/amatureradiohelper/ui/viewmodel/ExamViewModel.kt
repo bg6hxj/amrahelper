@@ -599,6 +599,13 @@ class ExamViewModel(
                     if (isCorrect) {
                         correctCount++
                     }
+                    
+                    // 记录每道题的答题结果
+                    questionRepository.recordAnswer(
+                        questionId = questionId,
+                        level = _selectedLevel.value,
+                        isCorrect = isCorrect
+                    )
                 }
                 
                 val isPassed = correctCount >= config.passCount

@@ -115,6 +115,7 @@ fun AboutScreen(
                         )
                         
                         Divider(modifier = Modifier.padding(horizontal = 16.dp))
+
                         
                         // 隐私政策
                         LegalInfoItem(
