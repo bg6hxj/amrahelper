@@ -3,6 +3,7 @@ package bg6hxj.amatureradiohelper.ui.screen
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -20,6 +22,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -29,56 +34,71 @@ import androidx.compose.foundation.clickable
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import bg6hxj.amatureradiohelper.data.UserPreferences
+import coil.ImageLoader
 import coil.compose.AsyncImage
-import com.canhub.cropper.CropImageContract
-import com.canhub.cropper.CropImageContractOptions
-import com.canhub.cropper.CropImageOptions
-import com.canhub.cropper.CropImageView
+import coil.request.ImageRequest
+import com.smarttoolfactory.cropper.ImageCropper
+import com.smarttoolfactory.cropper.model.AspectRatio
+import com.smarttoolfactory.cropper.model.OutlineType
+import com.smarttoolfactory.cropper.model.OvalCropShape
+import com.smarttoolfactory.cropper.settings.CropDefaults
+import com.smarttoolfactory.cropper.settings.CropOutlineProperty
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * 将外部 URI 图片复制到应用私有目录
+ * 将裁剪后的 Bitmap 保存到应用私有目录
  * @param context Context
- * @param sourceUri 源图片 URI
+ * @param bitmap 裁剪后的 Bitmap
  * @return 成功返回本地文件路径,失败返回 null
  */
-private fun copyImageToPrivateStorage(context: Context, sourceUri: Uri): String? {
-    return try {
-        // 创建私有目录文件
-        val avatarDir = File(context.filesDir, "avatar")
-        if (!avatarDir.exists()) {
-            avatarDir.mkdirs()
-        }
-        
-        // 删除旧头像文件
-        avatarDir.listFiles()?.forEach { it.delete() }
-        
-        // 生成新文件名
-        val extension = context.contentResolver.getType(sourceUri)?.let { mimeType ->
-            when {
-                mimeType.contains("png") -> "png"
-                mimeType.contains("webp") -> "webp"
-                else -> "jpg"
+private suspend fun saveCroppedBitmapToStorage(context: Context, bitmap: Bitmap): String? {
+    return withContext(Dispatchers.IO) {
+        try {
+            // 创建私有目录文件
+            val avatarDir = File(context.filesDir, "avatar")
+            if (!avatarDir.exists()) {
+                avatarDir.mkdirs()
             }
-        } ?: "jpg"
-        
-        val avatarFile = File(avatarDir, "user_avatar.$extension")
-        
-        // 复制图片数据
-        context.contentResolver.openInputStream(sourceUri)?.use { input ->
-            avatarFile.outputStream().use { output ->
-                input.copyTo(output)
+
+            // 删除旧头像文件
+            avatarDir.listFiles()?.forEach { it.delete() }
+
+            val avatarFile = File(avatarDir, "user_avatar.jpg")
+
+            // 保存 Bitmap 为 JPEG
+            FileOutputStream(avatarFile).use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
             }
+
+            avatarFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
-        
-        avatarFile.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
+    }
+}
+
+/**
+ * 从 URI 加载 ImageBitmap
+ */
+private suspend fun loadImageBitmapFromUri(context: Context, uri: Uri): ImageBitmap? {
+    return withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                bitmap?.asImageBitmap()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 }
 
@@ -86,7 +106,7 @@ private fun copyImageToPrivateStorage(context: Context, sourceUri: Uri): String?
  * 我的模块主页面
  * 包含个人信息展示、清除缓存、关于
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, coil.annotation.ExperimentalCoilApi::class)
 @Composable
 fun ProfileScreen(
     onAboutClick: () -> Unit,
@@ -101,6 +121,12 @@ fun ProfileScreen(
     val callsign by userPreferences.callsign.collectAsState(initial = "未设置")
     val avatarUri by userPreferences.avatarUri.collectAsState(initial = null)
     
+    // 用于强制 UI 刷新头像显示（时间戳）
+    var avatarRefreshKey by remember { mutableStateOf(System.currentTimeMillis()) }
+    
+    // Coil ImageLoader 用于清除缓存
+    val imageLoader = remember { ImageLoader(context) }
+    
     // 监控头像 URI 变化
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var showNicknameDialog by remember { mutableStateOf(false) }
@@ -111,52 +137,23 @@ fun ProfileScreen(
     // 拍照临时文件 URI
     var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
     
-    // 是否等待裁切（用于拍照流程）
-    var pendingCameraCrop by remember { mutableStateOf(false) }
+    // Compose Cropper 相关状态
+    var showCropDialog by remember { mutableStateOf(false) }
+    var imageToCrop by remember { mutableStateOf<ImageBitmap?>(null) }
+    var crop by remember { mutableStateOf(false) }
+    var isCropping by remember { mutableStateOf(false) }
     
-    // 图片裁切器
-    val cropImageLauncher = rememberLauncherForActivityResult(
-        contract = CropImageContract()
-    ) { result ->
-        if (result.isSuccessful) {
-            result.uriContent?.let { croppedUri ->
-                scope.launch {
-                    try {
-                        val savedPath = copyImageToPrivateStorage(context, croppedUri)
-                        if (savedPath != null) {
-                            userPreferences.saveAvatarUri(savedPath)
-                            Toast.makeText(context, "头像已更新", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "头像更新失败", Toast.LENGTH_SHORT).show()
-                        }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "头像更新失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        } else {
-            val exception = result.error
-            if (exception != null) {
-                Toast.makeText(context, "裁切失败: ${exception.message}", Toast.LENGTH_SHORT).show()
+    // 加载图片用于裁剪
+    fun loadImageForCrop(uri: Uri) {
+        scope.launch {
+            val bitmap = loadImageBitmapFromUri(context, uri)
+            if (bitmap != null) {
+                imageToCrop = bitmap
+                showCropDialog = true
+            } else {
+                Toast.makeText(context, "无法加载图片", Toast.LENGTH_SHORT).show()
             }
         }
-        pendingCameraCrop = false
-    }
-    
-    // 启动裁切的辅助函数
-    fun launchCrop(uri: Uri) {
-        val cropOptions = CropImageContractOptions(
-            uri = uri,
-            cropImageOptions = CropImageOptions(
-                guidelines = CropImageView.Guidelines.ON,
-                aspectRatioX = 1,
-                aspectRatioY = 1,
-                fixAspectRatio = true,
-                cropShape = CropImageView.CropShape.OVAL,
-                outputCompressQuality = 90
-            )
-        )
-        cropImageLauncher.launch(cropOptions)
     }
     
     // 图片选择器
@@ -164,8 +161,7 @@ fun ProfileScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { sourceUri ->
-            // 启动裁切
-            launchCrop(sourceUri)
+            loadImageForCrop(sourceUri)
         }
     }
     
@@ -174,9 +170,7 @@ fun ProfileScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && cameraPhotoUri != null) {
-            // 拍照成功，启动裁切
-            pendingCameraCrop = true
-            launchCrop(cameraPhotoUri!!)
+            loadImageForCrop(cameraPhotoUri!!)
         }
     }
     
@@ -254,6 +248,7 @@ fun ProfileScreen(
                 nickname = nickname,
                 callsign = callsign,
                 avatarUri = avatarUri,
+                avatarRefreshKey = avatarRefreshKey,
                 onAvatarClick = { showImageSourceDialog = true },
                 onNicknameClick = { showNicknameDialog = true },
                 onCallsignClick = { showCallsignDialog = true }
@@ -392,6 +387,142 @@ fun ProfileScreen(
             }
         )
     }
+    
+    // 图片裁剪对话框
+    if (showCropDialog && imageToCrop != null) {
+        ImageCropDialog(
+            imageBitmap = imageToCrop!!,
+            crop = crop,
+            onCropStart = { isCropping = true },
+            onCropSuccess = { croppedBitmap ->
+                isCropping = false
+                crop = false
+                scope.launch {
+                    try {
+                        val savedPath = saveCroppedBitmapToStorage(context, croppedBitmap.asAndroidBitmap())
+                        if (savedPath != null) {
+                            // 清除 Coil 的内存和磁盘缓存中的头像
+                            imageLoader.memoryCache?.clear()
+                            imageLoader.diskCache?.clear()
+                            
+                            userPreferences.saveAvatarUri(savedPath)
+                            avatarRefreshKey = System.currentTimeMillis() // 刷新 UI
+                            Toast.makeText(context, "头像已更新", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "头像更新失败", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "头像更新失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                    showCropDialog = false
+                    imageToCrop = null
+                }
+            },
+            onConfirmRequest = { crop = true },
+            onDismiss = {
+                showCropDialog = false
+                imageToCrop = null
+                crop = false
+                isCropping = false
+            },
+            isCropping = isCropping
+        )
+    }
+}
+
+/**
+ * 图片裁剪对话框
+ */
+@Composable
+private fun ImageCropDialog(
+    imageBitmap: ImageBitmap,
+    crop: Boolean,
+    onCropStart: () -> Unit,
+    onCropSuccess: (ImageBitmap) -> Unit,
+    onConfirmRequest: () -> Unit,
+    onDismiss: () -> Unit,
+    isCropping: Boolean
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isCropping) onDismiss() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.85f),
+        title = {
+            Text(
+                text = "裁剪头像",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                val cropProperties = CropDefaults.properties(
+                    cropOutlineProperty = CropOutlineProperty(
+                        OutlineType.Oval,
+                        OvalCropShape(0, "Oval")
+                    ),
+                    aspectRatio = AspectRatio(1f),
+                    fixedAspectRatio = true,
+                    handleSize = 20f
+                )
+                
+                val cropStyle = CropDefaults.style(
+                    drawOverlay = true,
+                    drawGrid = true,
+                    strokeWidth = 2.dp,
+                    overlayColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f),
+                    handleColor = MaterialTheme.colorScheme.primary,
+                    backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                
+                ImageCropper(
+                    modifier = Modifier.fillMaxSize(),
+                    imageBitmap = imageBitmap,
+                    contentDescription = "裁剪图片",
+                    cropProperties = cropProperties,
+                    cropStyle = cropStyle,
+                    crop = crop,
+                    onCropStart = onCropStart,
+                    onCropSuccess = onCropSuccess
+                )
+                
+                if (isCropping) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirmRequest,
+                enabled = !isCropping
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isCropping
+            ) {
+                Text("取消")
+            }
+        }
+    )
 }
 
 /**
@@ -402,6 +533,7 @@ fun ProfileInfoCard(
     nickname: String,
     callsign: String,
     avatarUri: String?,
+    avatarRefreshKey: Long,
     onAvatarClick: () -> Unit,
     onNicknameClick: () -> Unit,
     onCallsignClick: () -> Unit,
@@ -431,19 +563,24 @@ fun ProfileInfoCard(
             ) {
                 if (avatarUri != null) {
                     // 支持本地文件路径和 content URI
-                    val imageModel = if (avatarUri.startsWith("/")) {
+                    val imageData = if (avatarUri.startsWith("/")) {
                         File(avatarUri)  // 本地文件路径
                     } else {
                         avatarUri  // content:// URI (兼容旧数据)
                     }
                     
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = "头像",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                    )
+                    // 使用 key 来强制在缓存清除后重组
+                    key(avatarRefreshKey) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(imageData)
+                                .build(),
+                            contentDescription = "头像",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    }
                 } else {
                     Icon(
                         imageVector = Icons.Default.Person,
