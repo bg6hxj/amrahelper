@@ -1,6 +1,8 @@
 package bg6hxj.amatureradiohelper.ui.screen
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,10 +25,20 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.clickable
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import bg6hxj.amatureradiohelper.data.UserPreferences
 import coil.compose.AsyncImage
+import com.canhub.cropper.CropImageContract
+import com.canhub.cropper.CropImageContractOptions
+import com.canhub.cropper.CropImageOptions
+import com.canhub.cropper.CropImageView
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 将外部 URI 图片复制到应用私有目录
@@ -94,37 +106,138 @@ fun ProfileScreen(
     var showNicknameDialog by remember { mutableStateOf(false) }
     var showCallsignDialog by remember { mutableStateOf(false) }
     var showImageSourceDialog by remember { mutableStateOf(false) }
+    var showCameraPermissionDialog by remember { mutableStateOf(false) }
+    
+    // 拍照临时文件 URI
+    var cameraPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // 是否等待裁切（用于拍照流程）
+    var pendingCameraCrop by remember { mutableStateOf(false) }
+    
+    // 图片裁切器
+    val cropImageLauncher = rememberLauncherForActivityResult(
+        contract = CropImageContract()
+    ) { result ->
+        if (result.isSuccessful) {
+            result.uriContent?.let { croppedUri ->
+                scope.launch {
+                    try {
+                        val savedPath = copyImageToPrivateStorage(context, croppedUri)
+                        if (savedPath != null) {
+                            userPreferences.saveAvatarUri(savedPath)
+                            Toast.makeText(context, "头像已更新", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "头像更新失败", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "头像更新失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            val exception = result.error
+            if (exception != null) {
+                Toast.makeText(context, "裁切失败: ${exception.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        pendingCameraCrop = false
+    }
+    
+    // 启动裁切的辅助函数
+    fun launchCrop(uri: Uri) {
+        val cropOptions = CropImageContractOptions(
+            uri = uri,
+            cropImageOptions = CropImageOptions(
+                guidelines = CropImageView.Guidelines.ON,
+                aspectRatioX = 1,
+                aspectRatioY = 1,
+                fixAspectRatio = true,
+                cropShape = CropImageView.CropShape.OVAL,
+                outputCompressQuality = 90
+            )
+        )
+        cropImageLauncher.launch(cropOptions)
+    }
     
     // 图片选择器
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { sourceUri ->
-            scope.launch {
-                try {
-                    // 将图片复制到应用私有目录
-                    val savedPath = copyImageToPrivateStorage(context, sourceUri)
-                    
-                    if (savedPath != null) {
-                        // 保存本地文件路径
-                        userPreferences.saveAvatarUri(savedPath)
-                        Toast.makeText(context, "头像已更新", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "头像更新失败", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(context, "头像更新失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
+            // 启动裁切
+            launchCrop(sourceUri)
         }
     }
     
-    // 相机拍照（简化版，实际需要创建临时文件）
+    // 相机拍照
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success) {
-            Toast.makeText(context, "照片已保存", Toast.LENGTH_SHORT).show()
+        if (success && cameraPhotoUri != null) {
+            // 拍照成功，启动裁切
+            pendingCameraCrop = true
+            launchCrop(cameraPhotoUri!!)
+        }
+    }
+    
+    // 相机权限请求
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // 权限已授予，启动相机
+            try {
+                val avatarDir = File(context.filesDir, "avatar")
+                if (!avatarDir.exists()) {
+                    avatarDir.mkdirs()
+                }
+                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val photoFile = File(avatarDir, "camera_$timeStamp.jpg")
+                val photoUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    photoFile
+                )
+                cameraPhotoUri = photoUri
+                cameraLauncher.launch(photoUri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "无法打开相机: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "需要相机权限才能拍照", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // 检查并请求相机权限
+    fun checkAndRequestCameraPermission() {
+        when {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // 已有权限，直接启动相机
+                try {
+                    val avatarDir = File(context.filesDir, "avatar")
+                    if (!avatarDir.exists()) {
+                        avatarDir.mkdirs()
+                    }
+                    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                    val photoFile = File(avatarDir, "camera_$timeStamp.jpg")
+                    val photoUri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        photoFile
+                    )
+                    cameraPhotoUri = photoUri
+                    cameraLauncher.launch(photoUri)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "无法打开相机: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+            else -> {
+                // 请求权限
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
         }
     }
 
@@ -201,11 +314,8 @@ fun ProfileScreen(
                     TextButton(
                         onClick = {
                             showImageSourceDialog = false
-                            Toast.makeText(context, "相机功能开发中", Toast.LENGTH_SHORT).show()
-                            // 实际使用需要创建临时文件
-                            // val photoFile = createImageFile(context)
-                            // val photoUri = FileProvider.getUriForFile(...)
-                            // cameraLauncher.launch(photoUri)
+                            // 检查并请求相机权限
+                            checkAndRequestCameraPermission()
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -315,7 +425,8 @@ fun ProfileInfoCard(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable { onAvatarClick() },
                 contentAlignment = Alignment.Center
             ) {
                 if (avatarUri != null) {
@@ -334,14 +445,12 @@ fun ProfileInfoCard(
                             .clip(CircleShape)
                     )
                 } else {
-                    IconButton(onClick = onAvatarClick) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "修改头像",
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "修改头像",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
                 }
             }
 

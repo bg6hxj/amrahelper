@@ -75,23 +75,29 @@ fun AmatureRadioHelperApp() {
         BackHandler { showAboutScreen = false }
         AboutScreen(onBackClick = { showAboutScreen = false })
     } else if (showAddContactLogScreen) {
+        BackHandler { showAddContactLogScreen = false }
         AddContactLogScreen(onNavigateBack = { showAddContactLogScreen = false })
     } else if (showContactLogListScreen) {
+        BackHandler { showContactLogListScreen = false }
         ContactLogListScreen(
             onNavigateBack = { showContactLogListScreen = false },
             onAddLogClick = { showAddContactLogScreen = true }
         )
     } else if (showPropagationScreen) {
+        BackHandler { showPropagationScreen = false }
         PropagationScreen(onNavigateBack = { showPropagationScreen = false })
     } else if (showWavelengthCalculatorScreen) {
+        BackHandler { showWavelengthCalculatorScreen = false }
         WavelengthCalculatorScreen(onNavigateBack = { showWavelengthCalculatorScreen = false })
     } else if (showImageViewerScreen) {
+        BackHandler { showImageViewerScreen = false }
         ImageViewerScreen(
             url = imageViewUrl,
             title = imageViewTitle,
             onBack = { showImageViewerScreen = false }
         )
     } else if (showReferenceDetailScreen) {
+        BackHandler { showReferenceDetailScreen = false }
         ReferenceDetailScreen(
             type = referenceDetailType,
             onNavigateBack = { showReferenceDetailScreen = false },

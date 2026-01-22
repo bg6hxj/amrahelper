@@ -88,6 +88,9 @@ dependencies {
     // Apache Commons CSV
     implementation(libs.commons.csv)
     
+    // Image Cropper
+    implementation(libs.android.image.cropper)
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
